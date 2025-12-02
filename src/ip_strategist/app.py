@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 import os
-import sys
 import time
 import requests
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 
+# ----------------------------
 # Load .env config
+# ----------------------------
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 ENV_FILE = os.path.join(BASE_DIR, ".env")
 
@@ -16,47 +17,47 @@ if os.path.exists(ENV_FILE):
 else:
     print(f"❌ .env file not found at: {ENV_FILE}")
 
+# ----------------------------
 # Flask app setup
+# ----------------------------
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key')
 
-# Import CrewAI
+# ----------------------------
+# Import CrewAI (optional)
+# ----------------------------
 try:
     from crewai import Agent, Crew, Process, Task, LLM as CrewLLM
     CREWAI_AVAILABLE = True
     print("✅ CrewAI imported successfully")
-except ImportError as e:
+except Exception as e:
     print(f"❌ CrewAI import failed: {e}")
     CREWAI_AVAILABLE = False
 
-# Setup Gemini with correct model name
+# ----------------------------
+# Gemini / LLM setup
+# ----------------------------
 GEMINI_KEY = os.getenv('GOOGLE_API_KEY')
-MODEL_NAME = "gemini-1.5-flash"  # ✅ Using standard flash model (more reliable than lite)
+MODEL_NAME = "gemini-2.5-flash-lite"
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent"
 LLM = None
 
 def init_llm():
-    """Initialize LLM without testing to conserve quota"""
+    """Initialize CrewAI-backed LLM (no test call to conserve quota)."""
     global LLM
     if not GEMINI_KEY:
         print("❌ GOOGLE_API_KEY not found in environment")
         return
-    
+
     if not GEMINI_KEY.startswith('AIza'):
-        print(f"❌ Invalid API key format")
+        print("❌ Invalid API key format")
         return
-    
+
     print(f"🔑 API Key found: {GEMINI_KEY[:20]}...")
-    print(f"⚠️  Skipping initial API test to conserve quota")
-    
-    # Initialize CrewAI LLM directly without testing
+    print("⚠️  Skipping initial API test to conserve quota")
     try:
         print(f"🔄 Initializing CrewAI LLM with gemini/{MODEL_NAME}...")
-        LLM = CrewLLM(
-            model=f"gemini/{MODEL_NAME}",
-            api_key=GEMINI_KEY,
-            temperature=0.7
-        )
+        LLM = CrewLLM(model=f"gemini/{MODEL_NAME}", api_key=GEMINI_KEY, temperature=0.7)
         print("✅ CrewAI LLM initialized successfully!")
     except Exception as e:
         print(f"❌ CrewAI LLM init failed: {e}")
@@ -64,9 +65,11 @@ def init_llm():
 
 init_llm()
 
-# Rate limiting - increased to avoid quota issues
+# ----------------------------
+# Rate limiting
+# ----------------------------
 LAST_REQUEST_TIME = 0
-MIN_REQUEST_INTERVAL = 15  # ✅ 15 seconds between requests
+MIN_REQUEST_INTERVAL = 15  # seconds
 
 def rate_limit():
     """Rate limiting to avoid API quota exhaustion"""
@@ -78,8 +81,11 @@ def rate_limit():
         time.sleep(wait_time)
     LAST_REQUEST_TIME = time.time()
 
+# ----------------------------
+# Gemini API caller
+# ----------------------------
 def call_gemini_api(prompt):
-    """Call Gemini API directly with HTTP request"""
+    """Call Gemini API directly with HTTP request (simple wrapper)."""
     try:
         response = requests.post(
             GEMINI_API_URL,
@@ -88,7 +94,6 @@ def call_gemini_api(prompt):
             headers={"Content-Type": "application/json"},
             timeout=30
         )
-        
         if response.status_code == 200:
             result = response.json()
             return result['candidates'][0]['content']['parts'][0]['text']
@@ -96,30 +101,73 @@ def call_gemini_api(prompt):
             return "⚠️ Rate limit exceeded. Please wait a few minutes and try again. Check your quota at: https://ai.dev/usage"
         else:
             print(f"API Error: {response.status_code}")
-            error_msg = response.json()
-            print(error_msg)
-            return f"API Error: {error_msg.get('error', {}).get('message', 'Unknown error')}"
+            try:
+                error_msg = response.json()
+                print(error_msg)
+                return f"API Error: {error_msg.get('error', {}).get('message', 'Unknown error')}"
+            except Exception:
+                return f"API Error: {response.status_code}"
     except Exception as e:
         print(f"❌ API call error: {e}")
         return f"Error: {str(e)}"
 
+# ----------------------------
+# Output refinement helper
+# ----------------------------
+def refine_output(raw_text: str, short: bool = True) -> str:
+    """
+    Use Gemini to clean the raw agent output:
+    - remove chain-of-thought
+    - remove internal reasoning
+    - produce a concise, well-formatted report (headers, bullets)
+    """
+    if not GEMINI_KEY:
+        # If no API key, return raw text (best-effort)
+        return raw_text
+
+    # Keep the refinement prompt strict and prescriptive.
+    length_directive = "Keep it to one page, concise." if short else "Keep it concise and well-structured."
+    prompt = f"""
+You are an expert editor. Clean and refine the following AI output.
+
+Rules:
+- REMOVE any chain-of-thought, internal reasoning, or 'thinking' statements.
+- DO NOT include the LLM's thought process or how the answer was produced.
+- FORMAT the output with clear headers, short paragraphs, and bullets where helpful.
+- BE CONCISE and professional. {length_directive}
+- Keep technical assertions, numbers, and recommendations intact.
+- Do not call out that you removed reasoning.
+
+CONTENT:
+{raw_text}
+"""
+
+    refined = call_gemini_api(prompt)
+    # Fallback: if the model returned an error message, or is identical/empty, return raw_text trimmed.
+    if not refined or "API Error" in refined or "Rate limit exceeded" in refined:
+        return raw_text.strip()
+    return refined.strip()
+
+# ----------------------------
+# CrewAI agents & tasks - SIMPLIFIED VERSION
+# ----------------------------
 def create_agents(llm):
-    """Create AI agents with reduced iterations"""
+    """Create AI agents with reduced iterations to save quota."""
     return [
         Agent(
             role="Senior Patent Analyst",
             goal="Analyze patentability and provide comprehensive patent strategy",
             backstory="Expert patent analyst with 15+ years of experience in technology patents",
-            verbose=True,
+            verbose=False,  # Changed to False to reduce output noise
             llm=llm,
-            max_iter=2,  # ✅ Reduced to minimize API calls
+            max_iter=2,
             allow_delegation=False
         ),
         Agent(
             role="Senior Trademark Attorney",
             goal="Check trademark availability and conflicts",
             backstory="Experienced trademark attorney specializing in brand protection",
-            verbose=True,
+            verbose=False,  # Changed to False to reduce output noise
             llm=llm,
             max_iter=2,
             allow_delegation=False
@@ -128,7 +176,7 @@ def create_agents(llm):
             role="IP Valuation Director",
             goal="Estimate IP value and market potential",
             backstory="Financial expert in IP valuation with background in venture capital",
-            verbose=True,
+            verbose=False,  # Changed to False to reduce output noise
             llm=llm,
             max_iter=2,
             allow_delegation=False
@@ -138,7 +186,7 @@ def create_agents(llm):
 def create_tasks(data, agents):
     """Create tasks for all agents"""
     patent_agent, trademark_agent, valuation_agent = agents
-    
+
     tasks = [
         Task(
             description=f"""ANALYZE PATENTABILITY FOR: {data['technology_description']}
@@ -188,17 +236,17 @@ Include both conservative and optimistic scenarios.""",
             agent=valuation_agent
         ),
     ]
-    
     return tasks
 
+# ----------------------------
+# Flask routes
+# ----------------------------
 @app.route('/')
 def index():
-    """Serve main interface"""
     return render_template('index.html')
 
 @app.route('/health')
 def health():
-    """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
         'crewai_available': CREWAI_AVAILABLE,
@@ -209,56 +257,122 @@ def health():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Simple chat endpoint for the chatbot interface"""
+    """Simple chat endpoint for short IP Q&A"""
     if not GEMINI_KEY:
-        return jsonify({
-            'success': False, 
-            'error': 'AI system not available. Please check API key configuration.'
-        }), 500
-    
+        return jsonify({'success': False, 'error': 'AI system not available. Check API key.'}), 500
+
     data = request.json or {}
-    user_message = data.get('message', '')
-    
+    user_message = data.get('message', '').strip()
     if not user_message:
         return jsonify({'error': 'No message provided'}), 400
-    
+
     rate_limit()
-    
     try:
-        prompt = f"""You are an expert IP Strategy Assistant helping with intellectual property questions.
+        prompt = f"""You are an expert IP Strategy Assistant.
 
 User Question: {user_message}
 
-Provide a helpful, professional response about IP strategy, patents, trademarks, or related topics.
-Keep your response concise but informative (under 200 words)."""
-
+Give a concise, professional answer (<= 200 words)."""
         response = call_gemini_api(prompt)
-        
         if response:
-            return jsonify({
-                'success': True,
-                'response': response,
-                'model_used': MODEL_NAME
-            })
-        else:
-            return jsonify({
-                'success': False, 
-                'error': 'Failed to get response from AI'
-            }), 500
-            
+            return jsonify({'success': True, 'response': response.strip(), 'model_used': MODEL_NAME})
+        return jsonify({'success': False, 'error': 'Failed to get response from AI'}), 500
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({
-            'success': False, 
-            'error': f'Error: {str(e)}'
-        }), 500
+        return jsonify({'success': False, 'error': f'Error: {str(e)}'}), 500
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    """Main IP analysis endpoint - SIMPLIFIED VERSION using direct Gemini API"""
+    """Main IP analysis endpoint - FIXED: Changed from analyze_ip to analyze"""
     print(f"🔍 /analyze endpoint called")
-    print(f"🔍 GEMINI_KEY available: {bool(GEMINI_KEY)}")
+    print(f"🔍 CREWAI_AVAILABLE: {CREWAI_AVAILABLE}")
+    print(f"🔍 LLM available: {LLM is not None}")
+    
+    if not CREWAI_AVAILABLE or not LLM:
+        # Fallback to direct Gemini API if CrewAI not available
+        print(f"⚠️ CrewAI not available, using direct Gemini API instead")
+        return analyze_with_direct_api()
+    
+    data = request.json or {}
+    print(f"🔍 Request data received")
+    
+    required_fields = [
+        'technology_description',
+        'trademark_name',
+        'market_description',
+        'estimated_revenue',
+        'budget',
+        'timeline',
+        'competitor_list'
+    ]
+    missing = [f for f in required_fields if not data.get(f)]
+    if missing:
+        return jsonify({'error': f'Missing fields: {", ".join(missing)}'}), 400
+
+    rate_limit()
+
+    try:
+        print("\n" + "="*60)
+        print("🚀 Starting IP analysis using CrewAI...")
+        print("="*60)
+
+        agents = create_agents(LLM)
+        tasks = create_tasks(data, agents)
+
+        crew = Crew(
+            agents=agents,
+            tasks=tasks,
+            process=Process.sequential,
+            verbose=True
+        )
+
+        print("⚙️ Running crew analysis (this may take a while)...")
+        raw_result = crew.kickoff()
+        raw_text = str(raw_result).strip()
+
+        print("="*60)
+        print("✅ CrewAI analysis complete!")
+        print("="*60 + "\n")
+
+        # ----------------------------
+        # REFINE the raw output to remove chain-of-thought and make it concise
+        # ----------------------------
+        print("🔄 Refining output with Gemini...")
+        refined = refine_output(raw_text, short=True)
+
+        return jsonify({
+            'success': True,
+            'result_raw': raw_text,
+            'result_refined': refined,
+            'model_used': MODEL_NAME,
+            'method': 'crewai'
+        })
+
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"\n❌ CrewAI analysis failed with error:\n{error_trace}")
+
+        # Fallback to direct API if CrewAI fails
+        print("🔄 Falling back to direct Gemini API...")
+        try:
+            return analyze_with_direct_api()
+        except Exception as fallback_error:
+            error_str = str(e)
+            if '429' in error_str or 'quota' in error_str.lower() or 'RESOURCE_EXHAUSTED' in error_str:
+                return jsonify({
+                    'success': False,
+                    'error': 'API quota exceeded. Please wait and try again. Check your usage at: https://ai.dev/usage'
+                }), 429
+
+            return jsonify({'success': False, 'error': f'Analysis failed: {str(e)[:200]}'}), 500
+
+def analyze_with_direct_api():
+    """Fallback analysis using direct Gemini API (works like /chat)"""
+    print("🔄 Using direct Gemini API for analysis...")
+    
+    data = request.json or {}
     
     if not GEMINI_KEY:
         return jsonify({
@@ -266,55 +380,30 @@ def analyze():
             'error': 'AI system not available. Please check your configuration and API quota at https://ai.dev/usage'
         }), 500
 
-    data = request.json or {}
-    print(f"🔍 Request data received: {data}")
-    
-    required_fields = [
-        'technology_description', 
-        'trademark_name', 
-        'market_description', 
-        'estimated_revenue', 
-        'budget', 
-        'timeline', 
-        'competitor_list'
-    ]
-    missing = [f for f in required_fields if not data.get(f)]
-    
-    if missing:
-        return jsonify({
-            'error': f'Missing fields: {", ".join(missing)}'
-        }), 400
-
-    rate_limit()
-
     try:
-        print("\n" + "="*60)
-        print("🚀 Starting IP analysis using Gemini API...")
-        print("="*60)
-        
-        # Use simplified approach with direct Gemini API (same as /chat)
+        # Create comprehensive prompt for direct Gemini analysis
         prompt = f"""You are an expert IP Portfolio Strategist. Analyze this intellectual property portfolio:
 
 TECHNOLOGY DESCRIPTION:
-{data['technology_description']}
+{data.get('technology_description', 'N/A')}
 
 TRADEMARK NAME:
-{data['trademark_name']}
+{data.get('trademark_name', 'N/A')}
 
 TARGET MARKET:
-{data['market_description']}
+{data.get('market_description', 'N/A')}
 
 ESTIMATED REVENUE POTENTIAL:
-{data['estimated_revenue']}
+{data.get('estimated_revenue', 'N/A')}
 
 BUDGET FOR IP PROTECTION:
-{data['budget']}
+{data.get('budget', 'N/A')}
 
 TIMELINE:
-{data['timeline']}
+{data.get('timeline', 'N/A')}
 
 COMPETITORS:
-{data['competitor_list']}
+{data.get('competitor_list', 'N/A')}
 
 Provide a comprehensive IP strategy analysis covering:
 
@@ -343,45 +432,33 @@ Provide a comprehensive IP strategy analysis covering:
    - Risk assessment
 
 Format your response with clear headings, bullet points, and actionable insights.
-Keep it professional but concise."""
+Keep it professional but concise (around 500-700 words)."""
 
         print(f"⚙️ Calling Gemini API with prompt (length: {len(prompt)} chars)...")
         result = call_gemini_api(prompt)
         
         print("="*60)
-        print("✅ Analysis complete!")
+        print("✅ Direct API analysis complete!")
         print("="*60 + "\n")
         
         return jsonify({
             'success': True,
-            'result': result,
+            'result_refined': result.strip(),
             'model_used': MODEL_NAME,
-            'note': 'Analysis performed using direct Gemini API'
+            'method': 'direct_api',
+            'note': 'Analysis performed using direct Gemini API (fallback mode)'
         })
         
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"\n❌ Analysis failed with error:\n{error_trace}")
+        print(f"\n❌ Direct API analysis failed with error:\n{error_trace}")
         
-        # Check if it's a quota error
         error_str = str(e)
         if '429' in error_str or 'quota' in error_str.lower() or 'RESOURCE_EXHAUSTED' in error_str:
             return jsonify({
-                'success': False, 
-                'error': 'API quota exceeded. Please wait a few minutes and try again. Check your usage at: https://ai.dev/usage'
+                'success': False,
+                'error': 'API quota exceeded. Please wait and try again. Check your usage at: https://ai.dev/usage'
             }), 429
         
-        return jsonify({
-            'success': False, 
-            'error': f'Analysis failed: {str(e)[:200]}'
-        }), 500
-
-# Run the app
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    print(f"🚀 Starting Flask app on port {port}...")
-    print(f"🔧 CrewAI Available: {CREWAI_AVAILABLE}")
-    print(f"🔧 LLM Available: {LLM is not None}")
-    print(f"🔧 Google API Key: {'✅' if GEMINI_KEY else '❌'}")
-    app.run(host='0.0.0.0', port=port, debug=True)
+        return jsonify({'success': False, 'error': f'Direct API analysis failed: {str(e)[:200]}'}), 500
