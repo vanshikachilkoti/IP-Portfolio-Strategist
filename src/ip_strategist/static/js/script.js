@@ -78,6 +78,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 const result = await response.json();
                 
+                // DEBUG: Log the response to console
+                console.log("API Response:", result);
+                console.log("Available result fields:", {
+                    result_refined: result.result_refined,
+                    result: result.result,
+                    result_raw: result.result_raw,
+                    response: result.response
+                });
+                
                 if (result.success) {
                     displayResults(result);
                 } else {
@@ -85,6 +94,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="error">
                             <h4>❌ Analysis Failed</h4>
                             <p>${result.error || 'An error occurred during analysis.'}</p>
+                            <p style="font-size: 0.9em; color: #6b7280; margin-top: 10px;">
+                                Method: ${result.method || 'N/A'} | Model: ${result.model_used || 'N/A'}
+                            </p>
                         </div>
                     `;
                 }
@@ -104,8 +116,11 @@ document.addEventListener('DOMContentLoaded', function() {
 function displayResults(result) {
     const resultsContent = document.getElementById('resultsContent');
     
+    // FIX: Check all possible result fields
+    const resultText = result.result_refined || result.result || result.result_raw || result.response || "";
+    
     // Format the result text with better styling
-    const formattedResult = formatResultText(result.result);
+    const formattedResult = formatResultText(resultText);
     
     let html = `
         <div class="result-card">
@@ -123,7 +138,7 @@ function displayResults(result) {
 }
 
 function formatResultText(text) {
-    if (!text) return '<p>No results available.</p>';
+    if (!text || text.trim() === '') return '<p>No results available.</p>';
     
     // Split by double newlines for paragraphs
     let formatted = text
