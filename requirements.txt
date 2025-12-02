@@ -1,5 +1,5 @@
 numpy==2.1.3
-chromadb==0.5.23
+chromadb==1.1.0
 crewai==1.6.1
 python-dotenv>=1.0.0
 flask>=2.3.3
@@ -8,4 +8,10 @@ tiktoken>=0.5.2
 requests>=2.31.0
 google-generativeai==0.7.2
 gunicorn>=21.2.0
+```
 
+## **If runtime.txt isn't working, add this to your Render dashboard:**
+
+Go to your Render service → Environment → Add environment variable:
+```
+PYTHON_VERSION = 3.11.9
