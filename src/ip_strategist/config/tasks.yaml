@@ -1,0 +1,40 @@
+patent_analysis_task:
+  description: >
+    Conduct a comprehensive patent landscape analysis on the given technology or invention.
+    Assess novelty, prior art, and provide strategic filing recommendations.
+  expected_output: >
+    A detailed patent analysis report highlighting key findings, novel aspects, and filing strategy.
+  agent: patent_analyzer
+
+trademark_detection_task:
+  description: >
+    Perform a trademark clearance search and conflict analysis for the given brand or product name.
+  expected_output: >
+    A report detailing potential conflicts, trademark classes, and registration advice.
+  agent: trademark_detector
+  depends_on: [patent_analysis_task]
+
+valuation_estimation_task:
+  description: >
+    Provide a data-driven intellectual property valuation using appropriate methodologies.
+  expected_output: >
+    A valuation report with financial models, assumptions, and risk analysis.
+  agent: valuation_estimator
+  depends_on: [trademark_detection_task]
+
+strategy_optimization_task:
+  description: >
+    Develop a comprehensive IP strategy optimizing portfolio management and aligning with business goals.
+  expected_output: >
+    An IP portfolio management plan including resource allocation and timeline.
+  agent: strategy_optimizer
+  depends_on: [valuation_estimation_task]
+
+competitor_monitoring_task:
+  description: >
+    Monitor competitor IP portfolios, analyze threats and opportunities, and provide actionable intelligence.
+  expected_output: >
+    A competitive intelligence report with ongoing monitoring recommendations.
+  agent: competitor_monitor
+  depends_on: [strategy_optimization_task]
+  output_file: competitor_report.md

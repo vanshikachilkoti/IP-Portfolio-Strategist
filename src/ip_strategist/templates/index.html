@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP Portfolio Strategist</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Intellectual Property Portfolio Strategist</h1>
+            <p>AI-powered analysis for your IP protection strategy</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Chatbot Section -->
+            <div class="chat-section">
+                <div class="chat-header">
+                    <h3>IP Strategy Assistant</h3>
+                </div>
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message bot-message">
+                        Welcome! I'm your IP Strategy Assistant. I can help analyze your intellectual property needs across patents, trademarks, valuation, strategy, and competitor monitoring. How can I assist you today?
+                    </div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="chatInput" placeholder="Ask about patents, trademarks, valuation...">
+                    <button onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+
+            <!-- Analysis Form -->
+            <div class="analysis-form">
+                <div class="form-header">
+                    <h3>Complete IP Analysis</h3>
+                    <div class="progress-indicator">
+                        <div class="progress-step active">1</div>
+                        <div class="progress-step">2</div>
+                        <div class="progress-step">3</div>
+                        <div class="progress-step">4</div>
+                        <div class="progress-step">5</div>
+                    </div>
+                </div>
+
+                <form id="ipAnalysisForm">
+                    <!-- Patent Analysis Section -->
+                    <div class="form-section active">
+                        <h4>Patent Landscape Analysis</h4>
+                        <div class="input-group">
+                            <label>Describe your technology innovation - what makes it unique?</label>
+                            <textarea name="technology_description" placeholder="Describe your technology, its unique features, and what problem it solves..." required></textarea>
+                        </div>
+                        <button type="button" class="next-btn" onclick="nextSection(1)">Next: Trademark Check</button>
+                    </div>
+
+                    <!-- Trademark Analysis Section -->
+                    <div class="form-section">
+                        <h4>Trademark Conflict Detection</h4>
+                        <div class="input-group">
+                            <label>What name do you want to protect for your product/company?</label>
+                            <input type="text" name="trademark_name" placeholder="Enter your desired brand name..." required>
+                        </div>
+                        <button type="button" class="prev-btn" onclick="prevSection(1)">Previous</button>
+                        <button type="button" class="next-btn" onclick="nextSection(2)">Next: Valuation</button>
+                    </div>
+
+                    <!-- Valuation Section -->
+                    <div class="form-section">
+                        <h4>IP Valuation Estimation</h4>
+                        <div class="input-group">
+                            <label>What market are you targeting and estimated revenue?</label>
+                            <textarea name="market_description" placeholder="Describe your target market, size, and growth potential..." required></textarea>
+                            <input type="text" name="estimated_revenue" placeholder="Estimated annual revenue (e.g., $1M)" required>
+                        </div>
+                        <button type="button" class="prev-btn" onclick="prevSection(2)">Previous</button>
+                        <button type="button" class="next-btn" onclick="nextSection(3)">Next: Strategy</button>
+                    </div>
+
+                    <!-- Strategy Section -->
+                    <div class="form-section">
+                        <h4>Filing Strategy Optimization</h4>
+                        <div class="input-group">
+                            <label>What's your budget and timeline for IP protection?</label>
+                            <input type="text" name="budget" placeholder="IP protection budget (e.g., $50,000)" required>
+                            <input type="text" name="timeline" placeholder="Timeline (e.g., 6 months)" required>
+                        </div>
+                        <button type="button" class="prev-btn" onclick="prevSection(3)">Previous</button>
+                        <button type="button" class="next-btn" onclick="nextSection(4)">Next: Competitors</button>
+                    </div>
+
+                    <!-- Competitor Section -->
+                    <div class="form-section">
+                        <h4>Competitor IP Monitoring</h4>
+                        <div class="input-group">
+                            <label>Who are your main competitors in this space?</label>
+                            <textarea name="competitor_list" placeholder="List your main competitors and their key products..." required></textarea>
+                        </div>
+                        <button type="button" class="prev-btn" onclick="prevSection(4)">Previous</button>
+                        <button type="submit" class="submit-btn">Analyze IP Portfolio</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <div class="results-header">
+                    <h3>IP Analysis Results</h3>
+                </div>
+                <div class="results-content" id="resultsContent">
+                    <!-- Results will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
