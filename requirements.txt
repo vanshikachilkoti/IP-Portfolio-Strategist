@@ -1,5 +1,5 @@
 flask==2.3.3
-crewai==1.4.0
+crewai==0.28.0
 python-dotenv==1.1.1
 requests==2.31.0
 gunicorn==21.2.0
