@@ -2,8 +2,10 @@ services:
   - type: web
     name: ip-strategist-api
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "flask run --host 0.0.0.0 --port $PORT"
+    buildCommand: "pip install --no-cache-dir -r requirements.txt"
+    startCommand: "gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 300 src.ip_strategist.app:app"
     envVars:
-      - key: FLASK_APP
-        value: ip_strategist
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: MODEL_NAME
+        value: gemini-1.5-flash
