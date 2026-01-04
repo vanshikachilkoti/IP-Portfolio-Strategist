@@ -35,6 +35,11 @@ LIVE AT: https://ip-portfolio-strategist-3.onrender.com/
    ```bash
    pip install -r requirements.txt
    ```
+3. Run locally
+   ```bash
+   python main.py
+   # or: FLASK_APP=src.ip_strategist.app flask run --host=0.0.0.0 --port=5000
+   ```
 
 ### Windows (Prerequisites & Troubleshooting)
 

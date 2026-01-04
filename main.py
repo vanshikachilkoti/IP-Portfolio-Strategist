@@ -7,9 +7,9 @@ load_dotenv()
 
 def main():
     print("🔧 IP Strategist - Starting Up...")  
-    templates_path = os.path.join('templates')
-    if not os.path.exists('templates'):
-        print("❌ ERROR: templates directory not found")
+    package_templates = os.path.abspath(os.path.join(os.path.dirname(__file__), 'src', 'ip_strategist', 'templates'))
+    if not os.path.exists(package_templates):
+        print(f"❌ ERROR: templates directory not found at: {package_templates}")
         return
 
 
